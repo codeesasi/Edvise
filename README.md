@@ -1,12 +1,10 @@
 # Edvise
 
-[![MIT License][license-shield]]
-
 <!-- PROJECT LOGO -->
 <br />
 <p align="center">
   <a href="https://github.com/codeesasi/Edvise">
-    <img src="static/logo.jpg" alt="Logo" width="100" height="100">
+    <img src="static/logo.jpg" alt="Logo" width="300" height="300">
   </a>
 
   <h3 align="center">Edvise</h3>
