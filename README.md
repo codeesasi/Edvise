@@ -1,5 +1,3 @@
-# Edvise
-
 <!-- PROJECT LOGO -->
 <br />
 <p align="center">
@@ -7,7 +5,7 @@
     <img src="static/logo.jpg" alt="Logo" width="300" height="300">
   </a>
 
-  <h3 align="center">Edvise</h3>
+  <h1 align="center">Edvise</h1>
 
   <p align="center">
     A smart educational advisory platform that connects students with personalized learning resources
