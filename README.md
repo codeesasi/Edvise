@@ -6,7 +6,7 @@
 <br />
 <p align="center">
   <a href="https://github.com/codeesasi/Edvise">
-    <img src="static/logo.jpg" alt="Logo" width="80" height="80">
+    <img src="static/logo.jpg" alt="Logo" width="100" height="100">
   </a>
 
   <h3 align="center">Edvise</h3>
@@ -40,7 +40,6 @@
         <li><a href="#installation">Installation</a></li>
       </ul>
     </li>
-    <li><a href="#Built-With">Built With</a></li>
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
   </ol>
