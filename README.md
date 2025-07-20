@@ -10,7 +10,7 @@
   <p align="center">
     A smart educational advisory platform that connects students with personalized learning resources
     <br />
-    <a href="https://github.com/codeesasi/Edvise"><strong>Explore the docs »</strong></a>
+    <a href="documentation.html"><strong>View Documentation »</strong></a>
     <br />
     <br />
     <a href="https://github.com/codeesasi/Edvise/issues">Report Bug</a>
