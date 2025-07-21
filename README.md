@@ -91,14 +91,30 @@ To get Edvise running locally, follow these simple steps.
 
 3. Initialize the database
    ```sh
-   Download MangoDB : https://www.mongodb.com/docs/manual/installation/
-   Download PostgreSQL : https://www.postgresql.org/download/
+   # Set up PostgreSQL database (required for current functionality)
+   # The application uses PostgreSQL to store URL data
+   
+   ```
+
+4. Run the application
+   ```sh
+   python app.py
    ```
 
 <!-- USAGE EXAMPLES -->
 ## Usage
 
-Edvise offers a variety of features to enhance the educational experience:
+Edvise currently offers the following functionality:
+
+1. **URL Monitoring**: Automatically captures URLs copied to clipboard
+2. **Metadata Extraction**: Extracts title and thumbnail information from web pages
+3. **URL Management**: View, delete, and update saved URLs through a web interface
+
+The application works by:
+- Running a background thread that monitors your clipboard for valid URLs
+- When a URL is detected, it extracts metadata using BeautifulSoup
+- URLs and their metadata are stored in a PostgreSQL database
+- A Flask web interface allows you to view and manage your saved URLs
 
 See the [open issues](https://github.com/codeesasi/issues) for a list of proposed features and known issues.
 
