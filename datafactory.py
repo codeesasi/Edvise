@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 
 # Set the API key in the environment
-os.environ["GOOGLE_API_KEY"] = "AIzaSyCAlMUOgurlXqEWH9M_ZqrWtiG9tP4LOr4"
+os.environ["GOOGLE_API_KEY"] = ""
 
 def summarize_web_context(url):
     """Fetches content from a URL and uses Gemini to summarize it"""
