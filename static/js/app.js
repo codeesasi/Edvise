@@ -3,6 +3,10 @@ class UrlManager {
         this.refreshInterval = 30000;
         this.urls = [];
         this.editModal = null;
+        this.itemsPerPage = 5;  // Show 5 items per page
+        this.currentPage = 1;
+        this.totalPages = 1;
+        this.totalUrls = [];
     }
 
     initialize() {
@@ -29,7 +33,10 @@ class UrlManager {
         };
 
         this.setupEventListeners();
-        this.startPolling();
+        
+        // Start fetching data
+        this.fetchUrls();
+        setInterval(() => this.fetchUrls(), this.refreshInterval);
     }
 
     setupEventListeners() {
@@ -95,49 +102,33 @@ class UrlManager {
         return `
             <tr>
                 <td class="thumbnail-cell">
-                    ${url.thumbnail ? `<img src="${url.thumbnail}" alt="${url.title}">` : '<i class="bi bi-link-45deg"></i>'}
+                    ${url.thumbnail ? `<img src="${url.thumbnail}" alt="${url.title}" class="img-fluid rounded">` : '<i class="bi bi-link-45deg fs-2 text-primary"></i>'}
                 </td>
-                <td>${url.title}</td>
                 <td>
-                    <div class="btn-group">
+                    <div>
+                        <h5 class="mb-1 text-truncate" style="max-width: 300px;" title="${url.title}">${url.title}</h5>
+                        <small class="text-muted d-block mb-1">${this.extractDomain(url.url)}</small>
+                        <small class="text-muted">${this.formatDate(url.created_date)}</small>
+                    </div>
+                </td>
+                <td>
+                    <div class="d-flex gap-2">
                         <a href="${url.url}" target="_blank" class="btn btn-sm btn-primary">Visit</a>
-                        <button class="btn btn-sm btn-warning" onclick="urlManager.editUrl('${url.url}', '${url.title}', '${url.thumbnail || ''}')">Edit</button>
+                        <button class="btn btn-sm btn-warning" onclick="urlManager.editUrl('${url.url}', '${url.title.replace(/'/g, "\\'")}', '${url.thumbnail || ''}')">Edit</button>
                         <button class="btn btn-sm btn-danger" onclick="urlManager.deleteUrl('${url.url}')">Delete</button>
                     </div>
                 </td>
             </tr>
         `;
     }
-
-    editUrl(url, title, thumbnail) {
-        document.getElementById('editUrl').value = url;
-        document.getElementById('editTitle').value = title;
-        document.getElementById('editThumbnail').value = thumbnail;
-        this.editModal.show();
-    }
-
-    async saveEdit() {
-        const url = document.getElementById('editUrl').value;
-        const title = document.getElementById('editTitle').value;
-        const thumbnail = document.getElementById('editThumbnail').value;
-
+    
+    // Helper function to extract domain from URL
+    extractDomain(url) {
         try {
-            const response = await fetch('/api/urls', {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ url, title, thumbnail })
-            });
-
-            if (response.ok) {
-                this.editModal.hide();
-                await this.fetchUrls();
-                this.showToast('URL updated successfully');
-            } else {
-                this.showToast('Failed to update URL', 'error');
-            }
-        } catch (error) {
-            console.error('Error updating URL:', error);
-            this.showToast('Failed to update URL', 'error');
+            const hostname = new URL(url).hostname;
+            return hostname.replace(/^www\./, '');
+        } catch (e) {
+            return url;
         }
     }
 
@@ -260,31 +251,152 @@ class UrlManager {
     }
 
     renderUrls(urls) {
+        this.totalUrls = urls;
+        this.totalPages = Math.ceil(urls.length / this.itemsPerPage);
+        
+        if (this.currentPage > this.totalPages && this.totalPages > 0) {
+            this.currentPage = this.totalPages;
+        }
+        
         if (urls.length === 0) {
             this.container.innerHTML = '';
             this.noData.style.display = 'block';
+            this.renderPagination(0);
         } else {
             this.noData.style.display = 'none';
-            this.container.innerHTML = urls.map(url => this.createUrlCard(url)).join('');
+            
+            // Get current page items
+            const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+            const endIndex = Math.min(startIndex + this.itemsPerPage, urls.length);
+            const currentPageItems = urls.slice(startIndex, endIndex);
+            
+            this.container.innerHTML = currentPageItems.map(url => this.createUrlCard(url)).join('');
+            this.renderPagination(urls.length);
         }
     }
-
-    async deleteUrl(url) {
-        if (confirm('Are you sure you want to delete this URL?')) {
-            try {
-                await fetch('/api/urls', {
-                    method: 'DELETE',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({url})
-                });
-                await this.fetchUrls();
-                this.showToast('URL deleted successfully');
-            } catch (error) {
-                this.showToast('Failed to delete URL', 'error');
+    
+    renderPagination(totalItems) {
+        const paginationElement = document.getElementById('pagination');
+        if (!paginationElement) return;
+        
+        if (totalItems === 0 || this.totalPages <= 1) {
+            paginationElement.innerHTML = '';
+            return;
+        }
+        
+        let paginationHTML = `
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item ${this.currentPage === 1 ? 'disabled' : ''}">
+                        <a class="page-link" href="#" data-page="${this.currentPage - 1}">Previous</a>
+                    </li>
+        `;
+        
+        // Show up to 5 page numbers
+        const maxPagesToShow = 5;
+        let startPage = Math.max(1, this.currentPage - Math.floor(maxPagesToShow / 2));
+        const endPage = Math.min(startPage + maxPagesToShow - 1, this.totalPages);
+        
+        // Adjust startPage if we're near the end
+        if (endPage - startPage + 1 < maxPagesToShow) {
+            startPage = Math.max(1, endPage - maxPagesToShow + 1);
+        }
+        
+        // First page link if not in range
+        if (startPage > 1) {
+            paginationHTML += `
+                <li class="page-item">
+                    <a class="page-link" href="#" data-page="1">1</a>
+                </li>
+            `;
+            if (startPage > 2) {
+                paginationHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
             }
         }
+        
+        // Page numbers
+        for (let i = startPage; i <= endPage; i++) {
+            paginationHTML += `
+                <li class="page-item ${i === this.currentPage ? 'active' : ''}">
+                    <a class="page-link" href="#" data-page="${i}">${i}</a>
+                </li>
+            `;
+        }
+        
+        // Last page link if not in range
+        if (endPage < this.totalPages) {
+            if (endPage < this.totalPages - 1) {
+                paginationHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+            }
+            paginationHTML += `
+                <li class="page-item">
+                    <a class="page-link" href="#" data-page="${this.totalPages}">${this.totalPages}</a>
+                </li>
+            `;
+        }
+        
+        paginationHTML += `
+                    <li class="page-item ${this.currentPage === this.totalPages ? 'disabled' : ''}">
+                        <a class="page-link" href="#" data-page="${this.currentPage + 1}">Next</a>
+                    </li>
+                </ul>
+            </nav>
+        `;
+        
+        paginationElement.innerHTML = paginationHTML;
+        
+        // Add click event listeners to pagination links
+        document.querySelectorAll('#pagination .page-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const page = parseInt(e.target.dataset.page);
+                if (!isNaN(page)) {
+                    this.goToPage(page);
+                }
+            });
+        });
+    }
+    
+    goToPage(page) {
+        if (page < 1 || page > this.totalPages) return;
+        this.currentPage = page;
+        this.renderUrls(this.totalUrls);
+        window.scrollTo(0, 0); // Scroll to top when changing pages
     }
 
+    editUrl(url, title, thumbnail) {
+        document.getElementById('editUrl').value = url;
+        document.getElementById('editTitle').value = title;
+        document.getElementById('editThumbnail').value = thumbnail;
+        this.editModal.show();
+    }
+
+    async saveEdit() {
+        const url = document.getElementById('editUrl').value;
+        const title = document.getElementById('editTitle').value;
+        const thumbnail = document.getElementById('editThumbnail').value;
+
+        try {
+            const response = await fetch('/api/urls', {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ url, title, thumbnail })
+            });
+
+            if (response.ok) {
+                this.editModal.hide();
+                await this.fetchUrls();
+                this.showToast('URL updated successfully');
+            } else {
+                this.showToast('Failed to update URL', 'error');
+            }
+        } catch (error) {
+            console.error('Error updating URL:', error);
+            this.showToast('Failed to update URL', 'error');
+        }
+    }
+
+    // Make sure we have the startPolling method defined
     startPolling() {
         this.fetchUrls();
         setInterval(() => this.fetchUrls(), this.refreshInterval);
