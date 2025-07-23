@@ -83,6 +83,56 @@ class UrlManager {
                 this.filterModal.hide();
             });
         }
+        
+        // Add event listener for edit form submission to prevent default form behavior
+        const editForm = document.getElementById('editForm');
+        if (editForm) {
+            editForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.saveEdit();
+            });
+        }
+        
+        // Add input validation for the edit form fields
+        const editTitle = document.getElementById('editTitle');
+        if (editTitle) {
+            editTitle.addEventListener('input', () => {
+                this.validateEditForm();
+            });
+        }
+        
+        // Ensure modal is properly reset when closed
+        const editModalElement = document.getElementById('editModal');
+        if (editModalElement) {
+            editModalElement.addEventListener('hidden.bs.modal', () => {
+                this.resetEditForm();
+            });
+        }
+    }
+    
+    // Helper method to validate the edit form
+    validateEditForm() {
+        const title = document.getElementById('editTitle').value.trim();
+        const saveButton = document.querySelector('#editModal .btn-primary');
+        
+        if (saveButton) {
+            saveButton.disabled = title.length === 0;
+        }
+        
+        return title.length > 0;
+    }
+    
+    // Helper method to reset the edit form
+    resetEditForm() {
+        const form = document.getElementById('editForm');
+        if (form) {
+            form.reset();
+        }
+        
+        const saveButton = document.querySelector('#editModal .btn-primary');
+        if (saveButton) {
+            saveButton.disabled = false;
+        }
     }
 
     handleDateFilterChange() {
@@ -365,18 +415,71 @@ class UrlManager {
     }
 
     editUrl(url, title, thumbnail) {
-        document.getElementById('editUrl').value = url;
-        document.getElementById('editTitle').value = title;
-        document.getElementById('editThumbnail').value = thumbnail;
-        this.editModal.show();
+        try {
+            // Clear any previous form data
+            this.resetEditForm();
+            
+            // Safely set form values
+            const urlField = document.getElementById('editUrl');
+            const titleField = document.getElementById('editTitle');
+            const thumbnailField = document.getElementById('editThumbnail');
+            
+            if (urlField) urlField.value = url || '';
+            if (titleField) titleField.value = title || '';
+            if (thumbnailField) thumbnailField.value = thumbnail || '';
+            
+            // Show the modal
+            if (this.editModal) {
+                this.editModal.show();
+                // Focus on title field
+                setTimeout(() => {
+                    if (titleField) titleField.focus();
+                }, 500);
+            }
+            
+            // Validate the form
+            this.validateEditForm();
+        } catch (error) {
+            console.error('Error setting up edit modal:', error);
+            this.showToast('Error preparing edit form', 'error');
+        }
     }
 
     async saveEdit() {
-        const url = document.getElementById('editUrl').value;
-        const title = document.getElementById('editTitle').value;
-        const thumbnail = document.getElementById('editThumbnail').value;
+        // Check if form is valid before proceeding
+        if (!this.validateEditForm()) {
+            this.showToast('Please provide a title', 'warning');
+            return;
+        }
+        
+        // Get form values
+        const urlField = document.getElementById('editUrl');
+        const titleField = document.getElementById('editTitle');
+        const thumbnailField = document.getElementById('editThumbnail');
+        
+        if (!urlField || !titleField) {
+            this.showToast('Form fields not found', 'error');
+            return;
+        }
+        
+        const url = urlField.value.trim();
+        const title = titleField.value.trim();
+        const thumbnail = thumbnailField ? thumbnailField.value.trim() : '';
+        
+        if (!url) {
+            this.showToast('URL cannot be empty', 'warning');
+            return;
+        }
 
         try {
+            // Show loading indicator on the save button
+            const saveButton = document.querySelector('#editModal .btn-primary');
+            if (saveButton) {
+                const originalText = saveButton.innerHTML;
+                saveButton.disabled = true;
+                saveButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
+            }
+            
             const response = await fetch('/api/urls', {
                 method: 'PUT',
                 headers: {'Content-Type': 'application/json'},
@@ -388,11 +491,20 @@ class UrlManager {
                 await this.fetchUrls();
                 this.showToast('URL updated successfully');
             } else {
-                this.showToast('Failed to update URL', 'error');
+                const errorData = await response.json().catch(() => ({}));
+                const errorMessage = errorData.message || 'Failed to update URL';
+                this.showToast(errorMessage, 'error');
             }
         } catch (error) {
             console.error('Error updating URL:', error);
             this.showToast('Failed to update URL', 'error');
+        } finally {
+            // Reset the save button
+            const saveButton = document.querySelector('#editModal .btn-primary');
+            if (saveButton) {
+                saveButton.disabled = false;
+                saveButton.innerHTML = 'Apply';
+            }
         }
     }
 
