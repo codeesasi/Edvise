@@ -1,12 +1,50 @@
 class UrlManager {
     constructor() {
-        this.refreshInterval = 30000;
+        // Default settings
+        this.defaultSettings = {
+            refreshInterval: 30000,
+            itemsPerPage: 5
+        };
+        
+        // Initialize with default settings, will be overridden if stored settings exist
+        this.refreshInterval = this.defaultSettings.refreshInterval;
+        this.itemsPerPage = this.defaultSettings.itemsPerPage;
+        
         this.urls = [];
         this.editModal = null;
-        this.itemsPerPage = 5;  // Show 5 items per page
         this.currentPage = 1;
         this.totalPages = 1;
         this.totalUrls = [];
+        
+        // Load settings from localStorage when object is created
+        this.loadSettings();
+    }
+    
+    // Save settings to localStorage
+    saveSettings() {
+        const settings = {
+            refreshInterval: this.refreshInterval,
+            itemsPerPage: this.itemsPerPage
+        };
+        localStorage.setItem('edvise_settings', JSON.stringify(settings));
+    }
+    
+    // Load settings from localStorage
+    loadSettings() {
+        try {
+            const savedSettings = localStorage.getItem('edvise_settings');
+            if (savedSettings) {
+                const settings = JSON.parse(savedSettings);
+                // Apply saved settings
+                this.refreshInterval = settings.refreshInterval || this.defaultSettings.refreshInterval;
+                this.itemsPerPage = settings.itemsPerPage || this.defaultSettings.itemsPerPage;
+            }
+        } catch (e) {
+            console.error('Error loading settings:', e);
+            // If there's an error, use default settings
+            this.refreshInterval = this.defaultSettings.refreshInterval;
+            this.itemsPerPage = this.defaultSettings.itemsPerPage;
+        }
     }
 
     initialize() {
@@ -101,11 +139,11 @@ class UrlManager {
             });
         }
         
-        // Ensure modal is properly reset when closed
-        const editModalElement = document.getElementById('editModal');
-        if (editModalElement) {
-            editModalElement.addEventListener('hidden.bs.modal', () => {
-                this.resetEditForm();
+        // Add settings button event listener
+        const settingsButton = document.getElementById('settingsButton');
+        if (settingsButton) {
+            settingsButton.addEventListener('click', () => {
+                this.showSettings();
             });
         }
     }
@@ -470,48 +508,164 @@ class UrlManager {
             this.showToast('URL cannot be empty', 'warning');
             return;
         }
-
-        try {
-            // Show loading indicator on the save button
-            const saveButton = document.querySelector('#editModal .btn-primary');
-            if (saveButton) {
-                const originalText = saveButton.innerHTML;
-                saveButton.disabled = true;
-                saveButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
-            }
+        
+        // Disable the save button to prevent multiple clicks
+        const saveButton = document.querySelector('#editModal .btn-primary');
+        if (saveButton) {
+            saveButton.disabled = true;
+            // Show a loading indicator or change button text
+            const originalText = saveButton.innerHTML;
+            saveButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
             
-            const response = await fetch('/api/urls', {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ url, title, thumbnail })
-            });
-
-            if (response.ok) {
-                this.editModal.hide();
-                await this.fetchUrls();
-                this.showToast('URL updated successfully');
-            } else {
-                const errorData = await response.json().catch(() => ({}));
-                const errorMessage = errorData.message || 'Failed to update URL';
-                this.showToast(errorMessage, 'error');
-            }
-        } catch (error) {
-            console.error('Error updating URL:', error);
-            this.showToast('Failed to update URL', 'error');
-        } finally {
-            // Reset the save button
-            const saveButton = document.querySelector('#editModal .btn-primary');
-            if (saveButton) {
-                saveButton.disabled = false;
-                saveButton.innerHTML = 'Apply';
+            try {
+                // Make the API request to update the URL
+                const response = await fetch('/api/urls', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url, title, thumbnail })
+                });
+                
+                if (response.ok) {
+                    this.showToast('URL updated successfully');
+                    // Refresh the URL list
+                    this.fetchUrls();
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    const errorMessage = errorData.message || 'Failed to update URL';
+                    this.showToast(errorMessage, 'error');
+                }
+            } catch (error) {
+                console.error('Error updating URL:', error);
+                this.showToast('Failed to update URL', 'error');
+            } finally {
+                // Reset the save button
+                if (saveButton) {
+                    saveButton.disabled = false;
+                    saveButton.innerHTML = originalText;
+                }
             }
         }
     }
 
     // Make sure we have the startPolling method defined
     startPolling() {
+        // Clear any existing interval
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+        }
+        
+        // Fetch URLs immediately
         this.fetchUrls();
-        setInterval(() => this.fetchUrls(), this.refreshInterval);
+        
+        // Start a new interval with the current refresh interval
+        this.pollingInterval = setInterval(() => this.fetchUrls(), this.refreshInterval);
+        
+        console.log(`Polling started with interval: ${this.refreshInterval}ms`);
+    }
+
+    showSettings() {
+        // Initialize settings modal if it exists
+        const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
+        if (settingsModal) {
+            // Fill the settings form with current values before showing it
+            const itemsPerPageSelect = document.getElementById('itemsPerPage');
+            const refreshIntervalInput = document.getElementById('refreshInterval');
+            
+            if (itemsPerPageSelect) {
+                // Set the selected value for items per page
+                for (const option of itemsPerPageSelect.options) {
+                    if (parseInt(option.value) === this.itemsPerPage) {
+                        option.selected = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (refreshIntervalInput) {
+                // Convert ms to seconds for the form
+                refreshIntervalInput.value = this.refreshInterval / 1000;
+            }
+            
+            // Add event listener for save settings button
+            const saveSettingsBtn = document.getElementById('saveSettings');
+            if (saveSettingsBtn) {
+                // Remove any existing event listeners to avoid duplicates
+                const newSaveBtn = saveSettingsBtn.cloneNode(true);
+                saveSettingsBtn.parentNode.replaceChild(newSaveBtn, saveSettingsBtn);
+                
+                newSaveBtn.addEventListener('click', () => this.applySettings());
+            }
+            
+            settingsModal.show();
+        } else {
+            this.showToast('Settings feature coming soon!', 'info');
+        }
+    }
+    
+    applySettings() {
+        try {
+            // Get values from form
+            const itemsPerPageSelect = document.getElementById('itemsPerPage');
+            const refreshIntervalInput = document.getElementById('refreshInterval');
+            
+            let newItemsPerPage = this.itemsPerPage;
+            let newRefreshInterval = this.refreshInterval;
+            
+            // Update items per page if valid
+            if (itemsPerPageSelect) {
+                newItemsPerPage = parseInt(itemsPerPageSelect.value);
+                if (isNaN(newItemsPerPage) || newItemsPerPage < 1) {
+                    newItemsPerPage = this.defaultSettings.itemsPerPage;
+                }
+            }
+            
+            // Update refresh interval if valid (convert from seconds to ms)
+            if (refreshIntervalInput) {
+                const intervalSeconds = parseInt(refreshIntervalInput.value);
+                if (!isNaN(intervalSeconds) && intervalSeconds >= 10) {
+                    newRefreshInterval = intervalSeconds * 1000;
+                }
+            }
+            
+            // Apply the new settings
+            const settingsChanged = this.itemsPerPage !== newItemsPerPage || 
+                                   this.refreshInterval !== newRefreshInterval;
+            
+            if (settingsChanged) {
+                // Stop the existing polling interval
+                if (this.pollingInterval) {
+                    clearInterval(this.pollingInterval);
+                }
+                
+                // Apply new settings
+                this.itemsPerPage = newItemsPerPage;
+                this.refreshInterval = newRefreshInterval;
+                
+                // Save settings to localStorage
+                this.saveSettings();
+                
+                // Restart polling with new interval
+                this.startPolling();
+                
+                // Re-render URLs with new items per page
+                if (this.totalUrls && this.totalUrls.length) {
+                    this.renderUrls(this.totalUrls);
+                }
+                
+                this.showToast('Settings saved successfully', 'success');
+            }
+            
+            // Hide the modal
+            const settingsModal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+            if (settingsModal) {
+                settingsModal.hide();
+            }
+        } catch (error) {
+            console.error('Error applying settings:', error);
+            this.showToast('Failed to save settings', 'error');
+        }
     }
 }
 
