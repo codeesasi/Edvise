@@ -1,57 +1,31 @@
 class UrlManager {
     constructor() {
-        // Default settings
-        this.defaultSettings = {
-            refreshInterval: 30000,
-            itemsPerPage: 5
-        };
+        // Initialize managers and services
+        this.settings = new SettingsManager();
+        this.ui = new UIManager();
+        this.api = new UrlApiService();
         
-        // Initialize with default settings, will be overridden if stored settings exist
-        this.refreshInterval = this.defaultSettings.refreshInterval;
-        this.itemsPerPage = this.defaultSettings.itemsPerPage;
-        
+        // Url data storage
         this.urls = [];
-        this.editModal = null;
-        this.currentPage = 1;
-        this.totalPages = 1;
         this.totalUrls = [];
         
-        // Load settings from localStorage when object is created
-        this.loadSettings();
-    }
-    
-    // Save settings to localStorage
-    saveSettings() {
-        const settings = {
-            refreshInterval: this.refreshInterval,
-            itemsPerPage: this.itemsPerPage
-        };
-        localStorage.setItem('edvise_settings', JSON.stringify(settings));
-    }
-    
-    // Load settings from localStorage
-    loadSettings() {
-        try {
-            const savedSettings = localStorage.getItem('edvise_settings');
-            if (savedSettings) {
-                const settings = JSON.parse(savedSettings);
-                // Apply saved settings
-                this.refreshInterval = settings.refreshInterval || this.defaultSettings.refreshInterval;
-                this.itemsPerPage = settings.itemsPerPage || this.defaultSettings.itemsPerPage;
-            }
-        } catch (e) {
-            console.error('Error loading settings:', e);
-            // If there's an error, use default settings
-            this.refreshInterval = this.defaultSettings.refreshInterval;
-            this.itemsPerPage = this.defaultSettings.itemsPerPage;
-        }
+        // Pagination state
+        this.currentPage = 1;
+        this.totalPages = 1;
+        
+        // Modal references
+        this.editModal = null;
+        this.filterModal = null;
+        
+        // Polling
+        this.pollingInterval = null;
     }
 
     initialize() {
-        // Initialize DOM elements after document is ready
-        this.loader = document.getElementById('loader');
-        this.container = document.getElementById('url-container');
-        this.noData = document.getElementById('no-data');
+        // Initialize UI manager
+        this.ui.initialize();
+        
+        // Initialize DOM elements for this class
         this.searchInput = document.getElementById('searchInput');
         this.dateFilter = document.getElementById('dateFilter');
         this.dateFrom = document.getElementById('dateFrom');
@@ -60,69 +34,73 @@ class UrlManager {
         this.toggleFiltersBtn = document.getElementById('toggleFilters');
         this.quickSearch = document.getElementById('quickSearch');
         this.sortFilter = document.getElementById('sortFilter');
-        this.filterModal = new bootstrap.Modal(document.getElementById('filterModal'));
         this.applyFiltersBtn = document.getElementById('applyFilters');
-        this.editModal = new bootstrap.Modal(document.getElementById('editModal'));
-
-        this.currentFilters = {
-            search: '',
-            dateRange: { from: null, to: null },
-            sort: 'date_desc'
-        };
-
+        
+        // Initialize modals
+        const filterModalElement = document.getElementById('filterModal');
+        const editModalElement = document.getElementById('editModal');
+        
+        if (filterModalElement && window.bootstrap) {
+            this.filterModal = new bootstrap.Modal(filterModalElement);
+        }
+        
+        if (editModalElement && window.bootstrap) {
+            this.editModal = new bootstrap.Modal(editModalElement);
+        }
+        
+        // Set up event listeners
         this.setupEventListeners();
         
         // Start fetching data
-        this.fetchUrls();
-        setInterval(() => this.fetchUrls(), this.refreshInterval);
+        this.startPolling();
     }
 
     setupEventListeners() {
+        // Setup filter event listeners
+        this.setupFilterListeners();
+        this.setupFormListeners();
+        this.setupButtonListeners();
+    }
+    
+    setupFilterListeners() {
         if (this.quickSearch) {
             this.quickSearch.addEventListener('input', (e) => {
                 if (this.searchInput) this.searchInput.value = e.target.value;
                 this.filterUrls();
             });
         }
+        
         if (this.searchInput) {
-            this.searchInput.addEventListener('input', (e) => {
-                this.quickSearch.value = e.target.value;
-                this.filterUrls();
-            });
-        }
-        if (this.sortFilter) {
-            this.sortFilter.addEventListener('change', () => this.filterUrls());
-        }
-        document.querySelectorAll('[data-sort]').forEach(button => {
-            button.addEventListener('click', (e) => this.sortUrls(e.target.dataset.sort));
-        });
-        if (this.dateFilter) {
-            this.dateFilter.addEventListener('change', () => this.handleDateFilterChange());
-        }
-        if (this.dateFrom) {
-            this.dateFrom.addEventListener('change', () => this.filterUrls());
-        }
-        if (this.dateTo) {
-            this.dateTo.addEventListener('change', () => this.filterUrls());
-        }
-        if (this.toggleFiltersBtn) {
-            this.toggleFiltersBtn.addEventListener('click', () => {
-                const filterPanel = document.getElementById('filterPanel');
-                if (filterPanel.style.display === 'none' || !filterPanel.style.display) {
-                    filterPanel.style.display = 'block';
-                } else {
-                    filterPanel.style.display = 'none';
+            this.searchInput.addEventListener('input', () => {
+                if (this.quickSearch) {
+                    this.quickSearch.value = this.searchInput.value;
                 }
-            });
-        }
-        if (this.applyFiltersBtn) {
-            this.applyFiltersBtn.addEventListener('click', () => {
                 this.filterUrls();
-                this.filterModal.hide();
             });
         }
         
-        // Add event listener for edit form submission to prevent default form behavior
+        if (this.sortFilter) {
+            this.sortFilter.addEventListener('change', () => this.filterUrls());
+        }
+        
+        if (this.dateFilter) {
+            this.dateFilter.addEventListener('change', () => this.handleDateFilterChange());
+        }
+        
+        if (this.dateFrom) {
+            this.dateFrom.addEventListener('change', () => this.filterUrls());
+        }
+        
+        if (this.dateTo) {
+            this.dateTo.addEventListener('change', () => this.filterUrls());
+        }
+        
+        document.querySelectorAll('[data-sort]').forEach(button => {
+            button.addEventListener('click', (e) => this.sortUrls(e.target.dataset.sort));
+        });
+    }
+    
+    setupFormListeners() {
         const editForm = document.getElementById('editForm');
         if (editForm) {
             editForm.addEventListener('submit', (e) => {
@@ -131,15 +109,33 @@ class UrlManager {
             });
         }
         
-        // Add input validation for the edit form fields
         const editTitle = document.getElementById('editTitle');
         if (editTitle) {
             editTitle.addEventListener('input', () => {
                 this.validateEditForm();
             });
         }
+    }
+    
+    setupButtonListeners() {
+        if (this.toggleFiltersBtn) {
+            this.toggleFiltersBtn.addEventListener('click', () => {
+                const filterPanel = document.getElementById('filterPanel');
+                if (filterPanel) {
+                    filterPanel.style.display = filterPanel.style.display === 'none' || !filterPanel.style.display ? 'block' : 'none';
+                }
+            });
+        }
         
-        // Add settings button event listener
+        if (this.applyFiltersBtn) {
+            this.applyFiltersBtn.addEventListener('click', () => {
+                this.filterUrls();
+                if (this.filterModal) {
+                    this.filterModal.hide();
+                }
+            });
+        }
+        
         const settingsButton = document.getElementById('settingsButton');
         if (settingsButton) {
             settingsButton.addEventListener('click', () => {
@@ -148,19 +144,109 @@ class UrlManager {
         }
     }
     
-    // Helper method to validate the edit form
+    // Settings methods
+    showSettings() {
+        this.settings.showSettingsModal((newSettings) => {
+            // Handle settings changes
+            this.restartPolling();
+            this.renderUrls(this.totalUrls);
+            this.ui.showToast('Settings saved successfully', 'success');
+        });
+    }
+    
+    // Polling methods
+    startPolling() {
+        // Clear any existing interval
+        this.restartPolling();
+    }
+    
+    restartPolling() {
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+        }
+        
+        // Fetch URLs immediately
+        this.fetchUrls();
+        
+        // Start a new interval with the current refresh interval
+        const refreshInterval = this.settings.getSetting('refreshInterval');
+        this.pollingInterval = setInterval(() => this.fetchUrls(), refreshInterval);
+    }
+    
+    // URL manipulation methods
+    async fetchUrls() {
+        this.ui.showLoader();
+        try {
+            this.urls = await this.api.fetchUrls();
+            this.renderUrls(this.urls);
+        } catch (error) {
+            console.error('Error fetching URLs:', error);
+            this.ui.showToast('Failed to load URLs', 'error');
+        } finally {
+            this.ui.hideLoader();
+        }
+    }
+    
+    renderUrls(urls) {
+        this.totalUrls = urls || [];
+        const itemsPerPage = this.settings.getSetting('itemsPerPage');
+        this.totalPages = Math.ceil(this.totalUrls.length / itemsPerPage);
+        
+        if (this.currentPage > this.totalPages && this.totalPages > 0) {
+            this.currentPage = this.totalPages;
+        }
+        
+        if (!this.totalUrls.length) {
+            this.ui.container.innerHTML = '';
+            this.ui.noData.style.display = 'block';
+            this.ui.renderPagination(this.currentPage, this.totalPages, 0, this.goToPage.bind(this));
+            return;
+        }
+        
+        this.ui.noData.style.display = 'none';
+        
+        // Get current page items
+        const startIndex = (this.currentPage - 1) * itemsPerPage;
+        const endIndex = Math.min(startIndex + itemsPerPage, this.totalUrls.length);
+        const currentPageItems = this.totalUrls.slice(startIndex, endIndex);
+        
+        const handlers = {
+            edit: this.editUrl.bind(this),
+            delete: this.deleteUrl.bind(this)
+        };
+        
+        this.ui.container.innerHTML = currentPageItems
+            .map(url => this.ui.createUrlCard(url, handlers))
+            .join('');
+            
+        this.ui.renderPagination(
+            this.currentPage, 
+            this.totalPages, 
+            this.totalUrls.length, 
+            this.goToPage.bind(this)
+        );
+    }
+    
+    goToPage(page) {
+        if (page < 1 || page > this.totalPages) return;
+        
+        this.currentPage = page;
+        this.renderUrls(this.totalUrls);
+        window.scrollTo(0, 0); // Scroll to top when changing pages
+    }
+
+    // Form handling methods
     validateEditForm() {
         const title = document.getElementById('editTitle').value.trim();
         const saveButton = document.querySelector('#editModal .btn-primary');
         
         if (saveButton) {
-            saveButton.disabled = title.length === 0;
+            saveButton.disabled = !title.length;
         }
         
         return title.length > 0;
     }
     
-    // Helper method to reset the edit form
     resetEditForm() {
         const form = document.getElementById('editForm');
         if (form) {
@@ -172,7 +258,7 @@ class UrlManager {
             saveButton.disabled = false;
         }
     }
-
+    
     handleDateFilterChange() {
         const value = this.dateFilter.value;
         this.customDateRange.style.display = value === 'custom' ? 'block' : 'none';
@@ -324,132 +410,20 @@ class UrlManager {
         this.renderUrls(sorted);
     }
 
-    async fetchUrls() {
-        this.showLoader();
-        try {
-            const response = await fetch('/api/urls');
-            this.urls = await response.json();
-            this.renderUrls(this.urls);
-        } catch (error) {
-            console.error('Error loading URLs:', error);
-            this.showToast('Failed to load URLs', 'error');
-        } finally {
-            this.hideLoader();
-        }
-    }
-
-    renderUrls(urls) {
-        this.totalUrls = urls;
-        this.totalPages = Math.ceil(urls.length / this.itemsPerPage);
-        
-        if (this.currentPage > this.totalPages && this.totalPages > 0) {
-            this.currentPage = this.totalPages;
+    // Make sure we have the startPolling method defined
+    startPolling() {
+        // Clear any existing interval
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
         }
         
-        if (urls.length === 0) {
-            this.container.innerHTML = '';
-            this.noData.style.display = 'block';
-            this.renderPagination(0);
-        } else {
-            this.noData.style.display = 'none';
-            
-            // Get current page items
-            const startIndex = (this.currentPage - 1) * this.itemsPerPage;
-            const endIndex = Math.min(startIndex + this.itemsPerPage, urls.length);
-            const currentPageItems = urls.slice(startIndex, endIndex);
-            
-            this.container.innerHTML = currentPageItems.map(url => this.createUrlCard(url)).join('');
-            this.renderPagination(urls.length);
-        }
-    }
-    
-    renderPagination(totalItems) {
-        const paginationElement = document.getElementById('pagination');
-        if (!paginationElement) return;
+        // Fetch URLs immediately
+        this.fetchUrls();
         
-        if (totalItems === 0 || this.totalPages <= 1) {
-            paginationElement.innerHTML = '';
-            return;
-        }
+        // Start a new interval with the current refresh interval
+        this.pollingInterval = setInterval(() => this.fetchUrls(), this.refreshInterval);
         
-        let paginationHTML = `
-            <nav aria-label="Page navigation">
-                <ul class="pagination justify-content-center">
-                    <li class="page-item ${this.currentPage === 1 ? 'disabled' : ''}">
-                        <a class="page-link" href="#" data-page="${this.currentPage - 1}">Previous</a>
-                    </li>
-        `;
-        
-        // Show up to 5 page numbers
-        const maxPagesToShow = 5;
-        let startPage = Math.max(1, this.currentPage - Math.floor(maxPagesToShow / 2));
-        const endPage = Math.min(startPage + maxPagesToShow - 1, this.totalPages);
-        
-        // Adjust startPage if we're near the end
-        if (endPage - startPage + 1 < maxPagesToShow) {
-            startPage = Math.max(1, endPage - maxPagesToShow + 1);
-        }
-        
-        // First page link if not in range
-        if (startPage > 1) {
-            paginationHTML += `
-                <li class="page-item">
-                    <a class="page-link" href="#" data-page="1">1</a>
-                </li>
-            `;
-            if (startPage > 2) {
-                paginationHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
-            }
-        }
-        
-        // Page numbers
-        for (let i = startPage; i <= endPage; i++) {
-            paginationHTML += `
-                <li class="page-item ${i === this.currentPage ? 'active' : ''}">
-                    <a class="page-link" href="#" data-page="${i}">${i}</a>
-                </li>
-            `;
-        }
-        
-        // Last page link if not in range
-        if (endPage < this.totalPages) {
-            if (endPage < this.totalPages - 1) {
-                paginationHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
-            }
-            paginationHTML += `
-                <li class="page-item">
-                    <a class="page-link" href="#" data-page="${this.totalPages}">${this.totalPages}</a>
-                </li>
-            `;
-        }
-        
-        paginationHTML += `
-                    <li class="page-item ${this.currentPage === this.totalPages ? 'disabled' : ''}">
-                        <a class="page-link" href="#" data-page="${this.currentPage + 1}">Next</a>
-                    </li>
-                </ul>
-            </nav>
-        `;
-        
-        paginationElement.innerHTML = paginationHTML;
-        
-        // Add click event listeners to pagination links
-        document.querySelectorAll('#pagination .page-link').forEach(link => {
-            link.addEventListener('click', (e) => {
-                e.preventDefault();
-                const page = parseInt(e.target.dataset.page);
-                if (!isNaN(page)) {
-                    this.goToPage(page);
-                }
-            });
-        });
-    }
-    
-    goToPage(page) {
-        if (page < 1 || page > this.totalPages) return;
-        this.currentPage = page;
-        this.renderUrls(this.totalUrls);
-        window.scrollTo(0, 0); // Scroll to top when changing pages
+        console.log(`Polling started with interval: ${this.refreshInterval}ms`);
     }
 
     editUrl(url, title, thumbnail) {
@@ -548,128 +522,11 @@ class UrlManager {
             }
         }
     }
-
-    // Make sure we have the startPolling method defined
-    startPolling() {
-        // Clear any existing interval
-        if (this.pollingInterval) {
-            clearInterval(this.pollingInterval);
-        }
-        
-        // Fetch URLs immediately
-        this.fetchUrls();
-        
-        // Start a new interval with the current refresh interval
-        this.pollingInterval = setInterval(() => this.fetchUrls(), this.refreshInterval);
-        
-        console.log(`Polling started with interval: ${this.refreshInterval}ms`);
-    }
-
-    showSettings() {
-        // Initialize settings modal if it exists
-        const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
-        if (settingsModal) {
-            // Fill the settings form with current values before showing it
-            const itemsPerPageSelect = document.getElementById('itemsPerPage');
-            const refreshIntervalInput = document.getElementById('refreshInterval');
-            
-            if (itemsPerPageSelect) {
-                // Set the selected value for items per page
-                for (const option of itemsPerPageSelect.options) {
-                    if (parseInt(option.value) === this.itemsPerPage) {
-                        option.selected = true;
-                        break;
-                    }
-                }
-            }
-            
-            if (refreshIntervalInput) {
-                // Convert ms to seconds for the form
-                refreshIntervalInput.value = this.refreshInterval / 1000;
-            }
-            
-            // Add event listener for save settings button
-            const saveSettingsBtn = document.getElementById('saveSettings');
-            if (saveSettingsBtn) {
-                // Remove any existing event listeners to avoid duplicates
-                const newSaveBtn = saveSettingsBtn.cloneNode(true);
-                saveSettingsBtn.parentNode.replaceChild(newSaveBtn, saveSettingsBtn);
-                
-                newSaveBtn.addEventListener('click', () => this.applySettings());
-            }
-            
-            settingsModal.show();
-        } else {
-            this.showToast('Settings feature coming soon!', 'info');
-        }
-    }
-    
-    applySettings() {
-        try {
-            // Get values from form
-            const itemsPerPageSelect = document.getElementById('itemsPerPage');
-            const refreshIntervalInput = document.getElementById('refreshInterval');
-            
-            let newItemsPerPage = this.itemsPerPage;
-            let newRefreshInterval = this.refreshInterval;
-            
-            // Update items per page if valid
-            if (itemsPerPageSelect) {
-                newItemsPerPage = parseInt(itemsPerPageSelect.value);
-                if (isNaN(newItemsPerPage) || newItemsPerPage < 1) {
-                    newItemsPerPage = this.defaultSettings.itemsPerPage;
-                }
-            }
-            
-            // Update refresh interval if valid (convert from seconds to ms)
-            if (refreshIntervalInput) {
-                const intervalSeconds = parseInt(refreshIntervalInput.value);
-                if (!isNaN(intervalSeconds) && intervalSeconds >= 10) {
-                    newRefreshInterval = intervalSeconds * 1000;
-                }
-            }
-            
-            // Apply the new settings
-            const settingsChanged = this.itemsPerPage !== newItemsPerPage || 
-                                   this.refreshInterval !== newRefreshInterval;
-            
-            if (settingsChanged) {
-                // Stop the existing polling interval
-                if (this.pollingInterval) {
-                    clearInterval(this.pollingInterval);
-                }
-                
-                // Apply new settings
-                this.itemsPerPage = newItemsPerPage;
-                this.refreshInterval = newRefreshInterval;
-                
-                // Save settings to localStorage
-                this.saveSettings();
-                
-                // Restart polling with new interval
-                this.startPolling();
-                
-                // Re-render URLs with new items per page
-                if (this.totalUrls && this.totalUrls.length) {
-                    this.renderUrls(this.totalUrls);
-                }
-                
-                this.showToast('Settings saved successfully', 'success');
-            }
-            
-            // Hide the modal
-            const settingsModal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
-            if (settingsModal) {
-                settingsModal.hide();
-            }
-        } catch (error) {
-            console.error('Error applying settings:', error);
-            this.showToast('Failed to save settings', 'error');
-        }
-    }
 }
 
-const urlManager = new UrlManager();
+// Wait for scripts to load before initializing
 document.addEventListener('DOMContentLoaded', () => {
-    urlManager.initialize();
+    // Initialize URL Manager
+    window.urlManager = new UrlManager();
+    window.urlManager.initialize();
 });
