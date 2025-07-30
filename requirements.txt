@@ -4,3 +4,5 @@ requests==2.26.0
 python-dotenv==0.19.0
 beautifulsoup4==4.9.3
 pyperclip==1.8.2
+pymongo==3.12.1
+scrapy==2.5.0
