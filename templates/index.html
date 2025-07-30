@@ -21,6 +21,15 @@
         <p>Loading URLs...</p>
     </div>
 
+    <div id="loading-overlay" class="position-fixed top-0 start-0 w-100 h-100 bg-white d-flex justify-content-center align-items-center" style="z-index: 9999;">
+        <div class="text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading application...</p>
+        </div>
+    </div>
+
     <div class="container py-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h4 class="mb-0">Your Saved URLs</h4>
@@ -132,6 +141,7 @@
                             <input type="text" class="form-control" id="editThumbnail">
                         </div>
                         <input type="hidden" id="editUrl">
+                        <input type="hidden" id="editUrlId">
                     </form>
                 </div>
                 <div class="modal-footer">
@@ -179,6 +189,30 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <script>
+        // Initialize toastr globally
+        if (window.toastr) {
+            window.toastr.options = {
+                closeButton: true,
+                progressBar: true,
+                positionClass: 'toast-bottom-right',
+                timeOut: 3000
+            };
+        }
+        
+        // Hide loading overlay when app is initialized
+        document.addEventListener('DOMContentLoaded', () => {
+            window.addEventListener('app-initialized', () => {
+                const loadingOverlay = document.getElementById('loading-overlay');
+                if (loadingOverlay) {
+                    loadingOverlay.classList.add('fade-out');
+                    setTimeout(() => {
+                        loadingOverlay.remove();
+                    }, 500);
+                }
+            });
+        });
+    </script>
     <!-- Load our modules first -->
     <script src="/static/js/ui.js"></script>
     <script src="/static/js/settings.js"></script>

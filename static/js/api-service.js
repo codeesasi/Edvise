@@ -2,7 +2,9 @@ class UrlApiService {
     constructor(baseUrl = '') {
         this.baseUrl = baseUrl;
         this.endpoints = {
-            urls: '/api/urls'
+            urls: '/api/urls',
+            visit: '/api/updateVisit',
+            settings: '/api/settings'
         };
         this.defaultHeaders = {
             'Content-Type': 'application/json'
@@ -10,22 +12,57 @@ class UrlApiService {
     }
     
     async fetchUrls() {
-        return this.sendRequest(this.endpoints.urls);
+        try {
+            console.log('API Service: Fetching URLs');
+            const data = await this.sendRequest(this.endpoints.urls);
+            
+            // Ensure we have an array response, even if empty
+            if (Array.isArray(data)) {
+                console.log(`API Service: Successfully fetched ${data.length} URLs`);
+                return data;
+            } else {
+                console.error('API Service: Unexpected response format:', data);
+                return [];
+            }
+        } catch (error) {
+            console.error('API Service: Error fetching URLs:', error);
+            throw new Error(`Failed to fetch URLs: ${error.message}`);
+        }
     }
     
-    async deleteUrl(url) {
+    async deleteUrl(id) {
         return this.sendRequest(
             this.endpoints.urls,
             'DELETE',
-            { url }
+            { id }
         );
     }
     
-    async updateUrl(url, title, thumbnail) {
+    async updateUrl(id, title, thumbnail) {
         return this.sendRequest(
             this.endpoints.urls,
             'PUT',
-            { url, title, thumbnail }
+            { id, title, thumbnail }
+        );
+    }
+    
+    async trackUrlVisit(id) {
+        return this.sendRequest(
+            this.endpoints.visit,
+            'POST',
+            { id }
+        );
+    }
+    
+    async fetchSettings() {
+        return this.sendRequest(this.endpoints.settings);
+    }
+    
+    async updateSettings(settings) {
+        return this.sendRequest(
+            this.endpoints.settings,
+            'PUT',
+            settings
         );
     }
     
@@ -49,6 +86,7 @@ class UrlApiService {
         }
         
         try {
+            console.log(`API ${method} request to ${endpoint}`, data);
             const response = await fetch(url, options);
             
             if (!response.ok) {

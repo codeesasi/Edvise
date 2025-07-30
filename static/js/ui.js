@@ -9,12 +9,24 @@ class UIManager {
         this.loader = document.getElementById('loader');
         this.container = document.getElementById('url-container');
         this.noData = document.getElementById('no-data');
+        
+        // Initialize toastr with default settings
+        if (window.toastr) {
+            window.toastr.options = {
+                closeButton: true,
+                progressBar: true,
+                positionClass: 'toast-bottom-right',
+                timeOut: 3000
+            };
+        }
     }
 
     showLoader() {
         if (this.loader) {
             this.loader.style.display = 'block';
-            this.noData.style.display = 'none';
+            if (this.noData) {
+                this.noData.style.display = 'none';
+            }
         }
     }
 
@@ -29,11 +41,43 @@ class UIManager {
     }
 
     showToast(message, type = 'success') {
-        toastr[type](message, '', {
-            closeButton: true,
-            progressBar: true,
-            positionClass: 'toast-bottom-right'
-        });
+        try {
+            // Check if toastr library exists and is properly initialized
+            if (typeof window.toastr === 'undefined') {
+                // Fallback to console if toastr isn't available
+                console.log(`Toast message (${type}): ${message}`);
+                return;
+            }
+            
+            // Make sure toastr has the necessary methods before calling them
+            if (typeof window.toastr[type] !== 'function') {
+                console.error(`Toastr method ${type} is not a function`);
+                // Try to use a default method if available
+                if (typeof window.toastr.info === 'function') {
+                    window.toastr.info(message);
+                } else {
+                    console.log(`Toast message (${type}): ${message}`);
+                }
+                return;
+            }
+            
+            // Configure toastr options directly, don't rely on extend
+            window.toastr.options = {
+                closeButton: true,
+                progressBar: true,
+                positionClass: 'toast-bottom-right',
+                timeOut: 3000,
+                extendedTimeOut: 1000,
+                preventDuplicates: false,
+                newestOnTop: true
+            };
+            
+            // Use toastr's notification methods
+            window.toastr[type](message);
+        } catch (e) {
+            console.error('Error showing toast notification:', e);
+            console.log(`Toast message (${type}): ${message}`);
+        }
     }
 
     createUrlCard(url, handlers) {
@@ -51,13 +95,32 @@ class UIManager {
                 </td>
                 <td>
                     <div class="d-flex gap-2">
-                        <a href="${url.url}" target="_blank" class="btn btn-sm btn-primary">Visit</a>
-                        <button class="btn btn-sm btn-warning" onclick="urlManager.editUrl('${url.url}', '${url.title.replace(/'/g, "\\'")}', '${url.thumbnail || ''}')">Edit</button>
-                        <button class="btn btn-sm btn-danger" onclick="urlManager.deleteUrl('${url.url}')">Delete</button>
+                        <a href="${url.url}" target="_blank" class="btn btn-sm btn-primary visit-url-btn position-relative" data-id="${url.id}">
+                            Visit
+                            ${parseInt(url.visit) > 0 ? 
+                                `<span class="position-absolute top-10 start-65 translate-middle badge rounded-pill bg-danger">
+                                    ${url.visit > 99 ? '99+' : url.visit}
+                                    <span class="visually-hidden">visit count</span>
+                                </span>` : 
+                                ''}
+                        </a>
+                        <button class="btn btn-sm btn-warning" onclick="urlManager.editUrl('${url.id}', '${url.url}', '${url.title.replace(/'/g, "\\'")}', '${url.thumbnail || ''}')">Edit</button>
+                        <button class="btn btn-sm btn-danger" onclick="urlManager.deleteUrl('${url.id}')">Delete</button>
                     </div>
                 </td>
             </tr>
         `;
+    }
+    
+    // Add a helper method to escape HTML and prevent XSS
+    escapeHtml(unsafe) {
+        if (typeof unsafe !== 'string') return '';
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 
     formatDate(dateString) {
@@ -156,6 +219,7 @@ class UIManager {
         });
     }
 }
+
 
 // Export the class
 window.UIManager = UIManager;

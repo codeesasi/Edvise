@@ -10,12 +10,13 @@
     transform: translate(-50%, -50%);
     text-align: center;
     z-index: 1000;
+    padding: 40px 0;
 }
 
 .loader {
     border: 5px solid #f3f3f3;
+    border-top: 5px solid #0d6efd;
     border-radius: 50%;
-    border-top: 5px solid #3498db;
     width: 50px;
     height: 50px;
     animation: spin 1s linear infinite;
@@ -28,7 +29,7 @@
 }
 
 .fade-out {
-    animation: fadeOut 0.5s ease-out forwards;
+    animation: fadeOut 0.5s forwards;
 }
 
 @keyframes fadeOut {
@@ -150,4 +151,29 @@
 /* Remove old filter panel styles */
 .filter-panel {
     display: none;
+}
+
+/* Visit count badge styling */
+.visit-url-btn .badge {
+    font-size: 0.75rem;
+    transform: translate(15%, -15%) !important;
+}
+
+/* Make sure the visit button has enough padding for the badge */
+.visit-url-btn {
+    padding-right: 1.2rem;
+}
+.visit-url-btn .badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    transform: translate(50%, -50%);
+    z-index: 0;
+}
+
+/* Loading overlay styles */
+#loading-overlay {
+    background-color: #fff;
+    z-index: 9999;
+    transition: opacity 0.5s;
 }

@@ -13,13 +13,64 @@ class SettingsManager {
         this.loadSettings();
     }
     
-    // Save settings to localStorage
-    saveSettings() {
+    // Save settings to localStorage and API
+    async saveSettings() {
+        // Save to localStorage first (as a fallback)
         localStorage.setItem('edvise_settings', JSON.stringify(this.settings));
+        
+        // Then save to API
+        try {
+            await fetch('/api/settings', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(this.settings)
+            });
+            console.log('Settings saved to API');
+        } catch (error) {
+            console.error('Failed to save settings to API:', error);
+            // Still proceed with local changes since we saved to localStorage
+        }
     }
     
-    // Load settings from localStorage
-    loadSettings() {
+    // Load settings from API first, then fallback to localStorage
+    async loadSettings() {
+        try {
+            // Try to fetch from API first
+            const response = await fetch('/api/settings');
+            
+            if (response.ok) {
+                const apiSettings = await response.json();
+                console.log('Settings loaded from API:', apiSettings);
+                
+                if (apiSettings && typeof apiSettings === 'object') {
+                    // Process API settings, converting string values to appropriate types
+                    this.settings = {
+                        refreshInterval: parseInt(apiSettings.refreshInterval) || this.defaultSettings.refreshInterval,
+                        itemsPerPage: parseInt(apiSettings.itemsPerPage) || this.defaultSettings.itemsPerPage
+                    };
+                    
+                    // Also update localStorage with these settings
+                    localStorage.setItem('edvise_settings', JSON.stringify(this.settings));
+                    return this.settings;
+                }
+            }
+            
+            // If API fails, fall back to localStorage
+            this.loadSettingsFromLocalStorage();
+            
+        } catch (e) {
+            console.error('Error loading settings from API:', e);
+            // Fallback to localStorage
+            this.loadSettingsFromLocalStorage();
+        }
+        
+        return this.settings;
+    }
+    
+    // Helper method to load from localStorage
+    loadSettingsFromLocalStorage() {
         try {
             const savedSettings = localStorage.getItem('edvise_settings');
             if (savedSettings) {
@@ -30,11 +81,10 @@ class SettingsManager {
                 };
             }
         } catch (e) {
-            console.error('Error loading settings:', e);
+            console.error('Error loading settings from localStorage:', e);
             // If there's an error, use default settings
             this.settings = Object.assign({}, this.defaultSettings);
         }
-        return this.settings;
     }
     
     // Get a specific setting
@@ -43,17 +93,17 @@ class SettingsManager {
     }
     
     // Update a specific setting
-    updateSetting(key, value) {
+    async updateSetting(key, value) {
         if (key in this.defaultSettings) {
             this.settings[key] = value;
-            this.saveSettings();
+            await this.saveSettings();
             return true;
         }
         return false;
     }
     
     // Update multiple settings at once
-    updateSettings(newSettings) {
+    async updateSettings(newSettings) {
         let changed = false;
         for (const [key, value] of Object.entries(newSettings)) {
             if (key in this.defaultSettings && this.settings[key] !== value) {
@@ -63,7 +113,7 @@ class SettingsManager {
         }
         
         if (changed) {
-            this.saveSettings();
+            await this.saveSettings();
         }
         
         return changed;
@@ -110,7 +160,7 @@ class SettingsManager {
         return true;
     }
     
-    applySettings(callback) {
+    async applySettings(callback) {
         try {
             // Get values from form
             const itemsPerPageSelect = document.getElementById('itemsPerPage');
@@ -134,8 +184,8 @@ class SettingsManager {
                 }
             }
             
-            // Update the settings
-            const changed = this.updateSettings(newSettings);
+            // Update the settings in backend API and localStorage
+            const changed = await this.updateSettings(newSettings);
             
             // Hide the modal
             const settingsModal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
